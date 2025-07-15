@@ -2,6 +2,7 @@ import asyncHandler from "../util/asyncHandler.js";
 import ApiError from "../util/ApiError.js";
 import ApiResponse from "../util/ApiResponse.js";
 import User from "../model/user.model.js";
+import {uploadOnCloudinary} from "../util/cloudinariy.js";
 
 const genrateAccessTokenAndgenrateRefreshTokens = async (userId) => {
     const user = await User.findById(userId);
@@ -20,7 +21,7 @@ export const Register = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All field required!");
     }
 
-    const existingUser = User.findOne({
+    const existingUser = await User.findOne({
         $or: [{ username }, { email }]
     });
 
@@ -28,11 +29,22 @@ export const Register = asyncHandler(async (req, res) => {
         throw new ApiError(400, "User already exist please login");
     }
 
-    console.log(req.file);
-    const profileImg = req.file.img;
+    const profileLocalPath = req.file?.path;
+
+    if (!profileLocalPath) {
+        throw new ApiError(400, "Profile img is required!")
+    }
+
+    const profileImg = await uploadOnCloudinary(profileLocalPath);
+
+    if(!profileImg) {
+        throw new ApiError(400, "Img file is required!")
+    }
+
+    console.log(profileImg)
 
     if (!profileImg) {
-        throw new ApiError(400, "Profile img is required!")
+        throw new ApiError(405, "Something went wrong while uploading the image!");
     }
 
     const newUser = await User.create({ username, email, password, img: profileImg.url });
@@ -43,9 +55,10 @@ export const Register = asyncHandler(async (req, res) => {
         throw new ApiError(400, "something went worng while creating user!");
     }
 
-    return res.status(200).json(new ApiResponse(200, "User register successfully!"))
+    return res.status(201).json(new ApiResponse(201, createdUser, "User register successfully!"))
 
 });
+
 
 export const Login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -54,7 +67,7 @@ export const Login = asyncHandler(async (req, res) => {
         throw new ApiError(400, "all fields required!");
     }
 
-    const user = await User.findOne(email);
+    const user = await User.findOne({ email });
 
     if (!user) {
         throw new ApiError(400, "user does not exist!")
@@ -66,7 +79,7 @@ export const Login = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid user credentials!")
     }
 
-    const { accessToken, refreshToken } = user.genrateAccessTokenAndgenrateRefreshTokens(user._id);
+    const { accessToken, refreshToken } = await genrateAccessTokenAndgenrateRefreshTokens(user._id);
 
     const logedInUser = await User.findById(user._id).select("-password -refreshToken");
 
@@ -100,8 +113,8 @@ export const LogOut = asyncHandler(async (req, res) => {
 
     return res
         .status(200)
-        .cookie("accessToken", options)
-        .cookie("refreshToken", options)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
         .json(new ApiResponse(200, {}, "User logged out successfully"));
 
 });
