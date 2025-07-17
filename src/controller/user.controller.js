@@ -3,25 +3,26 @@ import ApiError from "../util/ApiError.js";
 import ApiResponse from "../util/ApiResponse.js";
 import User from "../model/user.model.js";
 import uploadOnCloudinary from "../util/cloudinariy.js"
+import jwt from "jsonwebtoken";
 
 const generateAccessTokenAndGenerateRefreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId);
         const accessToken = user.genrateAccessToken();
         const refreshToken = user.genrateRefreshToken();
-    
+
         user.refreshToken = refreshToken;
         await user.save({ validateBeforeSave: false });
-    
+
         return { accessToken, refreshToken };
     } catch (error) {
-         throw new ApiError(500, "something went wrong while genrating refresh and access token")
+        throw new ApiError(500, "something went wrong while genrating refresh and access token")
     }
 }
 
 export const Register = asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
-    
+
     if ([username, email, password].some((field) => field?.trim() === "")) {
         throw new ApiError(400, "All field required!");
     }
@@ -119,3 +120,43 @@ export const LogOut = asyncHandler(async (req, res) => {
 
 });
 
+export const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "unauthorized request");
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.Refresh_Token);
+
+        const user = await User.findById(decodedToken?._id);
+
+        if (!user) {
+            throw new ApiError(401, "Invalid refresh token");
+        }
+
+        if (user.refreshToken !== incomingRefreshToken) {
+            throw new ApiError(401, "Refresh token is expired or invalid");
+        }
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+        const { accessToken, newRefreshToken } = await generateAccessAndRefereshTokens(user._id);
+
+        return res.status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshToken, options)
+            .json(new ApiResponse(
+                200,
+                { accessToken, newRefreshToken },
+                "Access token refreshed successfully"
+            ))
+    } catch (error) {
+        console.error("Refresh token error:", error);
+        throw new ApiError(401, "Invalid refresh token");
+    }
+});
