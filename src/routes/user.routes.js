@@ -15,6 +15,6 @@ router.post("/logout", verifyjwt, LogOut);
 router.post("/refresh-token", refreshAccessToken);
 router.get("/get-user", verifyjwt, GetCurrentUSer)
 router.post("/change-password", verifyjwt, ChangePassword);
-router.post("/change-img", verifyjwt, UpdateImg);
+router.post("/change-img", verifyjwt, upload.single("img"), UpdateImg);
 
 export default router;
