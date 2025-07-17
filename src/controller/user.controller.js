@@ -2,21 +2,26 @@ import asyncHandler from "../util/asyncHandler.js";
 import ApiError from "../util/ApiError.js";
 import ApiResponse from "../util/ApiResponse.js";
 import User from "../model/user.model.js";
-import {uploadOnCloudinary} from "../util/cloudinariy.js";
+import uploadOnCloudinary from "../util/cloudinariy.js"
 
-const genrateAccessTokenAndgenrateRefreshTokens = async (userId) => {
-    const user = await User.findById(userId);
-    const accessToken = user.genrateAccessToken();
-    const refreshToken = user.genrateRefreshToken();
-
-    user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false });
-
-    return { accessToken, refreshToken };
+const generateAccessTokenAndGenerateRefreshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.genrateAccessToken();
+        const refreshToken = user.genrateRefreshToken();
+    
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false });
+    
+        return { accessToken, refreshToken };
+    } catch (error) {
+         throw new ApiError(500, "something went wrong while genrating refresh and access token")
+    }
 }
 
 export const Register = asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
+    
     if ([username, email, password].some((field) => field?.trim() === "")) {
         throw new ApiError(400, "All field required!");
     }
@@ -29,6 +34,7 @@ export const Register = asyncHandler(async (req, res) => {
         throw new ApiError(400, "User already exist please login");
     }
 
+    console.log(req.file?.path);
     const profileLocalPath = req.file?.path;
 
     if (!profileLocalPath) {
@@ -37,11 +43,9 @@ export const Register = asyncHandler(async (req, res) => {
 
     const profileImg = await uploadOnCloudinary(profileLocalPath);
 
-    if(!profileImg) {
+    if (!profileImg) {
         throw new ApiError(400, "Img file is required!")
     }
-
-    console.log(profileImg)
 
     if (!profileImg) {
         throw new ApiError(405, "Something went wrong while uploading the image!");
@@ -59,42 +63,38 @@ export const Register = asyncHandler(async (req, res) => {
 
 });
 
-
 export const Login = asyncHandler(async (req, res) => {
+    console.log(req.body);
     const { email, password } = req.body;
 
-    if (!(email || password)) {
-        throw new ApiError(400, "all fields required!");
+    if (!email || !password) {
+        throw new ApiError(400, "All fields are required!");
     }
 
     const user = await User.findOne({ email });
-
-    if (!user) {
-        throw new ApiError(400, "user does not exist!")
-    }
+    if (!user) throw new ApiError(400, "User does not exist!");
 
     const correctPassword = await user.isPasswordCorrect(password);
-
     if (!correctPassword) {
         throw new ApiError(400, "Invalid user credentials!")
-    }
+    };
 
-    const { accessToken, refreshToken } = await genrateAccessTokenAndgenrateRefreshTokens(user._id);
+    const { accessToken, refreshToken } = await generateAccessTokenAndGenerateRefreshTokens(user._id);
 
-    const logedInUser = await User.findById(user._id).select("-password -refreshToken");
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
 
     const options = {
         httpOnly: true,
-        secure: true
-    }
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict"
+    };
 
     return res
         .status(200)
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", refreshToken, options)
-        .json(new ApiResponse(200, { user: logedInUser, accessToken, refreshToken }, "User logedin successfully"));
-
-})
+        .json(new ApiResponse(200, { user: loggedInUser, accessToken, refreshToken }, "User logged in successfully"));
+});
 
 export const LogOut = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
