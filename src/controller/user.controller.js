@@ -160,3 +160,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
         throw new ApiError(401, "Invalid refresh token");
     }
 });
+
+export const GetCurrentUSer = asyncHandler( async (req, res) => {
+    return res.status(200).json(new ApiResponse(200, req.user, "User fetched successfully"));
+})
