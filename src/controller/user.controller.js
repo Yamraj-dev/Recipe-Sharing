@@ -175,7 +175,7 @@ export const ChangePassword = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user?._id);
 
     if(!user) {
-        throw new ApiError(400, "unauthorized request");
+        throw new ApiError(401, "unauthorized request");
     };
 
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
