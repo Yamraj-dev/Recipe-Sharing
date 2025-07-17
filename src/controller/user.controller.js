@@ -4,6 +4,7 @@ import ApiResponse from "../util/ApiResponse.js";
 import User from "../model/user.model.js";
 import uploadOnCloudinary from "../util/cloudinariy.js"
 import jwt from "jsonwebtoken";
+import deleteFromCloudinary from "../util/Delete_Old_Image.js";
 
 const generateAccessTokenAndGenerateRefreshTokens = async (userId) => {
     try {
@@ -45,14 +46,12 @@ export const Register = asyncHandler(async (req, res) => {
     const profileImg = await uploadOnCloudinary(profileLocalPath);
 
     if (!profileImg) {
-        throw new ApiError(400, "Img file is required!")
-    }
-
-    if (!profileImg) {
         throw new ApiError(405, "Something went wrong while uploading the image!");
     }
 
-    const newUser = await User.create({ username, email, password, img: profileImg.url });
+    console.log(profileImg);
+
+    const newUser = await User.create({ username, email, password, img: profileImg.url, public_id: profileImg.public_id });
 
     const createdUser = await User.findById(newUser._id).select("-password");
 
@@ -190,6 +189,27 @@ export const ChangePassword = asyncHandler(async (req, res) => {
 
     return res
         .status(200)
-        .json(new ApiResponse(200, {}, "Password chnaged successfully"))
+        .json(new ApiResponse(200, {}, "Password changed successfully"))
 
+});
+
+export const UpdateImg = asyncHandler(async (req, res) => {
+    const ImgLocalPath = req.file?.path;
+    if (!ImgLocalPath) throw new ApiError(400, "Img file is missing");
+
+    const img = await uploadOnCloudinary(ImgLocalPath);
+    if (!img.url) throw new ApiError(400, "Error while uploading img");
+
+    const user = await User.findById(req.user._id);
+
+    if (user.img?.public_id) {
+        await deleteFromCloudinary(user.img.public_id);
+    }
+
+    user.img = { url: img.url, public_id: img.public_id };
+    await user.save();
+
+    const safeUser = await User.findById(user._id).select("-password -refreshToken");
+
+    return res.status(200).json(new ApiResponse(200, safeUser, "Img updated successfully"));
 });

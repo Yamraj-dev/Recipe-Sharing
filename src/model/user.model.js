@@ -19,7 +19,8 @@ const userSchema = new mongoose.Schema({
     },
     img: {
         type: String, 
-        required: true
+        required: true,
+        public_id: String
     },
     refreshToken: {
         type: String,
